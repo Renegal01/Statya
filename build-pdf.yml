@@ -1,0 +1,62 @@
+name: Build PDF
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Compile LaTeX to PDF
+        uses: xu-cheng/latex-action@v4
+        with:
+          root_file: main.tex
+          texlive_version: 2026
+          os: debian
+          args: -pdf -file-line-error -halt-on-error -interaction=nonstopmode
+
+      - name: Prepare final PDF
+        shell: bash
+        run: cp main.pdf article.pdf
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: article-pdf
+          path: article.pdf
+          if-no-files-found: error
+
+      - name: Move latest tag to current commit
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f latest "${GITHUB_SHA}"
+          git push origin refs/tags/latest --force
+
+      - name: Publish PDF to GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: latest
+          name: PDF статьи
+          body: |
+            Автоматическая сборка LaTeX → PDF.
+            Коммит: ${{ github.sha }}
+          files: article.pdf
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          make_latest: true
